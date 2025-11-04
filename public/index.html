@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Portfolio Tracker API</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            max-width: 600px;
+        }
+        h1 { margin-top: 0; font-size: 2.5rem; }
+        .status { 
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: #10b981;
+            border-radius: 20px;
+            margin: 1rem 0;
+            font-weight: 600;
+        }
+        .api-info {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-top: 2rem;
+            text-align: left;
+        }
+        .api-info code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+        a {
+            color: #60a5fa;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        a:hover { text-decoration: underline; }
+        ul { list-style: none; padding: 0; }
+        li { margin: 0.8rem 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Stock Portfolio Tracker</h1>
+        <div class="status">✅ API Backend Online</div>
+        
+        <p>This is the backend API server. The frontend application should be deployed separately.</p>
+        
+        <div class="api-info">
+            <h3>📡 API Endpoints:</h3>
+            <ul>
+                <li>🔍 Health Check: <code>/api/health</code></li>
+                <li>🔐 Login: <code>/api/login</code></li>
+                <li>📈 Stocks: <code>/api/stocks</code></li>
+                <li>💼 Portfolio: <code>/api/portfolio/summary</code></li>
+            </ul>
+            
+            <p style="margin-top: 2rem;">
+                <strong>Next Step:</strong> Deploy the frontend from the <code>/frontend</code> directory as a separate Vercel project.
+            </p>
+            
+            <p style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.8;">
+                📚 <a href="https://github.com/art-pro/stockAssessApp" target="_blank">View Documentation</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+
