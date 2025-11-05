@@ -40,6 +40,12 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 		public.GET("/health", func(c *gin.Context) {
 			c.JSON(200, gin.H{"status": "ok"})
 		})
+		public.GET("/version", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"version":    config.Version,
+				"build_date": config.BuildDate,
+			})
+		})
 	}
 
 	// Protected routes
@@ -60,10 +66,10 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 		protected.DELETE("/stocks/:id", stockHandler.DeleteStock)
 		protected.POST("/stocks/update-all", stockHandler.UpdateAllStocks)
 		protected.POST("/stocks/:id/update", stockHandler.UpdateSingleStock)
-		
+
 		// Stock history routes
 		protected.GET("/stocks/:id/history", stockHandler.GetStockHistory)
-		
+
 		// Deleted stocks (log) routes
 		protected.GET("/deleted-stocks", stockHandler.GetDeletedStocks)
 		protected.POST("/deleted-stocks/:id/restore", stockHandler.RestoreStock)
@@ -72,10 +78,10 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 		protected.GET("/portfolio/summary", portfolioHandler.GetPortfolioSummary)
 		protected.GET("/portfolio/settings", portfolioHandler.GetSettings)
 		protected.PUT("/portfolio/settings", portfolioHandler.UpdateSettings)
-		
+
 		// API Status routes
 		protected.GET("/api-status", portfolioHandler.GetAPIStatus)
-		
+
 		// Export/Import routes
 		protected.GET("/export/csv", stockHandler.ExportCSV)
 		protected.POST("/import/csv", stockHandler.ImportCSV)
@@ -87,4 +93,3 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 
 	return router
 }
-
