@@ -4,28 +4,56 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/artpro/assessapp/internal/models"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
 // InitDB initializes the database connection and runs migrations
+// Supports both PostgreSQL (via DATABASE_URL) and SQLite (via dbPath for local dev)
 func InitDB(dbPath string) (*gorm.DB, error) {
-	// Ensure the directory exists
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create database directory: %w", err)
-	}
+	var db *gorm.DB
+	var err error
 
-	// Open database connection
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	// Check if DATABASE_URL is set (PostgreSQL for production)
+	databaseURL := os.Getenv("DATABASE_URL")
+	
+	if databaseURL != "" {
+		// Use PostgreSQL for production (Vercel)
+		fmt.Println("Using PostgreSQL database")
+		
+		// Handle Vercel Postgres format: postgres:// -> postgresql://
+		if strings.HasPrefix(databaseURL, "postgres://") {
+			databaseURL = strings.Replace(databaseURL, "postgres://", "postgresql://", 1)
+		}
+		
+		db, err = gorm.Open(postgres.Open(databaseURL), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Info),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+		}
+	} else {
+		// Use SQLite for local development
+		fmt.Printf("Using SQLite database: %s\n", dbPath)
+		
+		// Ensure the directory exists
+		dir := filepath.Dir(dbPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create database directory: %w", err)
+		}
+
+		db, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+			Logger: logger.Default.LogMode(logger.Info),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to SQLite: %w", err)
+		}
 	}
 
 	// Run auto migrations
