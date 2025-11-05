@@ -158,7 +158,7 @@ Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
 
 	// Build Grok API request
 	reqBody := GrokStockRequest{
-		Model: "grok-beta",
+		Model: "grok-4-latest",
 		Messages: []Message{
 			{
 				Role:    "system",
