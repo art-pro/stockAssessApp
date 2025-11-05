@@ -33,6 +33,10 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 			if len(origin) > 11 && origin[len(origin)-11:] == ".vercel.app" {
 				return true
 			}
+			// Allow custom domain artpro.dev
+			if origin == "https://www.artpro.dev" || origin == "https://artpro.dev" {
+				return true
+			}
 			return false
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
