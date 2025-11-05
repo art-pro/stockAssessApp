@@ -14,8 +14,8 @@ import (
 
 // ExternalAPIService handles all external API integrations
 type ExternalAPIService struct {
-	cfg              *config.Config
-	client           *http.Client
+	cfg               *config.Config
+	client            *http.Client
 	exchangeRateCache map[string]float64 // Cache for exchange rates from Grok
 }
 
@@ -146,8 +146,8 @@ Return ONLY a valid JSON object with these EXACT fields (no additional text):
   "assessment": "Add", "Hold", "Trim", or "Sell" based on expected_value
 }
 
-Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`, 
-		stock.Ticker, stock.CompanyName, stock.Sector, stock.Currency, 
+Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
+		stock.Ticker, stock.CompanyName, stock.Sector, stock.Currency,
 		stock.Ticker, stock.Currency, stock.Currency)
 
 	// Build Grok API request
@@ -173,7 +173,7 @@ Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
 
 	// xAI API endpoint
 	url := "https://api.x.ai/v1/chat/completions"
-	
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return s.mockStockData(stock)
@@ -189,7 +189,7 @@ Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
 		if err == nil && resp.StatusCode == http.StatusOK {
 			break
 		}
-		
+
 		if i < 2 {
 			time.Sleep(time.Duration(1<<uint(i)) * time.Second)
 		}
@@ -217,7 +217,7 @@ Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
 	}
 
 	content := grokResp.Choices[0].Message.Content
-	
+
 	// Parse the stock analysis JSON
 	var analysis StockAnalysis
 	if err := json.Unmarshal([]byte(content), &analysis); err != nil {
@@ -235,7 +235,7 @@ Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
 	stock.DividendYield = analysis.DividendYield
 	stock.ProbabilityPositive = analysis.ProbabilityPositive
 	stock.DownsideRisk = analysis.DownsideRisk
-	
+
 	// Use Grok's calculated metrics (no need to calculate locally!)
 	stock.UpsidePotential = analysis.UpsidePotential
 	stock.BRatio = analysis.BRatio
@@ -245,63 +245,41 @@ Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
 	stock.BuyZoneMin = analysis.BuyZoneMin
 	stock.BuyZoneMax = analysis.BuyZoneMax
 	stock.Assessment = analysis.Assessment
-	
+
 	// Store exchange rate for later use (will be retrieved by FetchExchangeRate)
 	s.cacheExchangeRate(stock.Currency, analysis.ExchangeRateToUSD)
 
 	return nil
 }
 
-// mockStockData provides comprehensive mock data including all calculations
+// mockStockData provides N/A values when Grok data is not available
 func (s *ExternalAPIService) mockStockData(stock *models.Stock) error {
-	// Generate consistent mock current price based on ticker
-	hash := 0
-	for _, c := range stock.Ticker {
-		hash = hash*31 + int(c)
-	}
-	stock.CurrentPrice = 50.0 + float64(hash%450)
-	
-	// Generate other mock values with reasonable relationships
-	stock.FairValue = stock.CurrentPrice * 1.20 // 20% upside
-	stock.Beta = 0.8 + (float64(len(stock.Ticker)) * 0.1)
-	stock.Volatility = 15.0 + (float64(len(stock.Ticker)) * 2.0)
-	stock.PERatio = 18.5
-	stock.EPSGrowthRate = 12.0
-	stock.DebtToEBITDA = 1.5
-	stock.DividendYield = 2.0
-	stock.ProbabilityPositive = 0.65
-	stock.DownsideRisk = -15.0
-	
-	// Calculate derived metrics (same formulas as Grok would use)
-	stock.UpsidePotential = ((stock.FairValue - stock.CurrentPrice) / stock.CurrentPrice) * 100
-	stock.BRatio = stock.UpsidePotential / (-stock.DownsideRisk)
-	stock.ExpectedValue = (stock.ProbabilityPositive * stock.UpsidePotential) + 
-		((1 - stock.ProbabilityPositive) * stock.DownsideRisk)
-	stock.KellyFraction = ((stock.BRatio * stock.ProbabilityPositive) - 
-		(1 - stock.ProbabilityPositive)) / stock.BRatio * 100
-	stock.HalfKellySuggested = stock.KellyFraction / 2
-	if stock.HalfKellySuggested > 15 {
-		stock.HalfKellySuggested = 15 // Cap at 15%
-	}
-	stock.BuyZoneMin = stock.CurrentPrice * 0.85
-	stock.BuyZoneMax = stock.FairValue * 0.95
-	
-	// Determine assessment
-	if stock.ExpectedValue > 7 {
-		stock.Assessment = "Add"
-	} else if stock.ExpectedValue > 0 {
-		stock.Assessment = "Hold"
-	} else if stock.ExpectedValue > -5 {
-		stock.Assessment = "Trim"
-	} else {
-		stock.Assessment = "Sell"
-	}
-	
+	// Set all values to 0 or empty to indicate data is not available (N/A)
+	// These will be displayed as "N/A" in the frontend
+	stock.CurrentPrice = 0
+	stock.FairValue = 0
+	stock.Beta = 0
+	stock.Volatility = 0
+	stock.PERatio = 0
+	stock.EPSGrowthRate = 0
+	stock.DebtToEBITDA = 0
+	stock.DividendYield = 0
+	stock.ProbabilityPositive = 0
+	stock.DownsideRisk = 0
+	stock.UpsidePotential = 0
+	stock.BRatio = 0
+	stock.ExpectedValue = 0
+	stock.KellyFraction = 0
+	stock.HalfKellySuggested = 0
+	stock.BuyZoneMin = 0
+	stock.BuyZoneMax = 0
+	stock.Assessment = "N/A"
+
 	// Cache mock exchange rate
 	mockExchangeRate := s.getMockExchangeRate(stock.Currency)
 	s.cacheExchangeRate(stock.Currency, mockExchangeRate)
-	
-	return nil
+
+	return fmt.Errorf("Grok API not configured - stock data unavailable")
 }
 
 // getMockExchangeRate returns a mock exchange rate for a currency
@@ -332,12 +310,12 @@ func (s *ExternalAPIService) FetchStockPrice(ticker string) (float64, error) {
 		Sector:      "Unknown",
 		Currency:    "USD",
 	}
-	
+
 	err := s.FetchAllStockData(tempStock)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return tempStock.CurrentPrice, nil
 }
 
@@ -411,4 +389,3 @@ func (s *ExternalAPIService) FetchAllExchangeRates(currencies []string) (map[str
 
 	return rates, nil
 }
-
