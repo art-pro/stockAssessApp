@@ -82,4 +82,3 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	// Serve the request
 	router.ServeHTTP(w, r)
 }
-
