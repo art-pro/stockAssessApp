@@ -114,9 +114,16 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 	// Fetch all stock data from Grok in one call (includes ALL calculations!)
 	// With automatic fallback to mock data that also includes calculations
 	if err := h.apiService.FetchAllStockData(&stock); err != nil {
-		h.logger.Warn().Err(err).Str("ticker", stock.Ticker).Msg("Failed to fetch stock data from Grok, using mock data")
-		// Mock data is already set by the service including all calculations
+		h.logger.Error().Err(err).Str("ticker", stock.Ticker).Msg("⚠️ GROK FETCH FAILED during stock creation - Check API key and logs above")
+		// Return error to prevent saving stock with N/A data
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": "Failed to fetch stock data from Grok API. Please check your XAI_API_KEY configuration.",
+			"ticker": stock.Ticker,
+		})
+		return
 	}
+	
+	h.logger.Info().Str("ticker", stock.Ticker).Msg("✓ Successfully fetched data from Grok")
 
 	// NO NEED to call CalculateMetrics - Grok already calculated everything!
 	// The following fields are now provided by Grok:
@@ -308,9 +315,12 @@ func (h *StockHandler) updateStockData(stock *models.Stock) error {
 
 	// Fetch all stock data from Grok in one call (includes ALL calculations!)
 	if err := h.apiService.FetchAllStockData(stock); err != nil {
-		h.logger.Warn().Err(err).Str("ticker", stock.Ticker).Msg("Failed to fetch stock data from Grok, using mock data")
+		h.logger.Error().Err(err).Str("ticker", stock.Ticker).Msg("⚠️ GROK FETCH FAILED - Check API key and logs above")
 		// Mock data is already set by the service including all calculations
+		return err
 	}
+	
+	h.logger.Info().Str("ticker", stock.Ticker).Msg("✓ Successfully fetched data from Grok")
 
 	// NO NEED to call CalculateMetrics - Grok already calculated everything!
 
