@@ -275,60 +275,60 @@ func (s *ExternalAPIService) FetchAllStockData(stock *models.Stock) error {
 		return s.mockStockData(stock)
 	}
 
-	// Create comprehensive prompt for Grok to analyze the stock AND calculate metrics
-	prompt := fmt.Sprintf(`Analyze the stock ticker "%s" (%s) in the %s sector with currency %s.
+	// Create comprehensive prompt based on the probabilistic investment strategy
+	prompt := fmt.Sprintf(`You are a financial analyst following a strict probabilistic investment strategy. The core philosophy is built on probabilistic thinking, expected value (EV) optimization, and ½-Kelly sizing to maximize long-term growth while minimizing ruin probability.
 
-Provide a COMPLETE financial analysis including raw data AND calculated investment metrics.
+Key principles:
 
-CRITICAL DEFINITIONS:
-- "current_price" = ACTUAL TRADING PRICE RIGHT NOW on the stock exchange (real-time market price)
-- "fair_value" = MEDIAN ANALYST CONSENSUS TARGET PRICE from sources like TipRanks, Yahoo Finance, or Bloomberg
-  * This should be the MEDIAN (not mean or high) of all analyst 12-month price targets
-  * Source this from reliable consensus data, NOT a single analyst estimate
-  * If multiple sources differ, use the most conservative (lower) target
-- These are DIFFERENT values. Current price is what you can buy TODAY. Fair value is future target.
+1. Probabilistic Thinking: Assign probabilities to scenarios (growth, stagnation, decline) rather than binary outcomes.
 
-IMPORTANT FORMULAS:
-- upside_potential = ((fair_value - current_price) / current_price) × 100
-- b_ratio = upside_potential / |downside_risk|
-- expected_value = (probability_positive × upside_potential) + ((1 - probability_positive) × downside_risk)
-- kelly_fraction = ((b_ratio × probability_positive) - (1 - probability_positive)) / b_ratio × 100
-- half_kelly_suggested = kelly_fraction / 2, capped at maximum 15
-- buy_zone_min = current_price × 0.85
-- buy_zone_max = fair_value × 0.95
-- assessment = "Add" if expected_value > 7, "Hold" if > 0, "Trim" if > -5, else "Sell"
+2. Expected Value (EV): Calculate EV = (p × upside %%) + ((1 - p) × downside %%). Only hold if EV > 0%%, add if >7%%, trim if <3%%, sell if <0%%.
 
-Return ONLY a valid JSON object with these EXACT fields (no additional text):
+3. Kelly Criterion: f* = [(b × p) - q] / b, where b = upside %% / |downside %%|, q = 1 - p. Use ½-Kelly for sizing, capped at 15%% for high-conviction/low-vol assets (typical 3–6%%).
+
+4. Sector targets: Healthcare 30–35%%, Technology 15%%, Energy 8–10%%, Financials 5–7%%, Industrials 3–4%%, Consumer Staples 8–10%%, REITs 5–7%%, Cash 8–12%%.
+
+Analyze the stock %s (%s) in the %s sector with currency %s.
+
+CRITICAL REQUIREMENTS:
+- "current_price" = ACTUAL REAL-TIME TRADING PRICE on the stock exchange (what you can buy TODAY)
+- "fair_value" = MEDIAN ANALYST CONSENSUS TARGET PRICE (12-month target from TipRanks/Yahoo Finance/Bloomberg)
+- These are DIFFERENT values. Current price is TODAY's market price. Fair value is FUTURE analyst target.
+- Use p=0.65 as default probability (adjust based on analyst ratings: 0.7 for Strong Buy, 0.65 for Buy, 0.5 for Hold)
+- Calibrate downside by beta: <0.5 = -15%%, 0.5-1 = -20%%, 1-1.5 = -25%%, >1.5 = -30%%
+- Buy zone: typically 85-95%% of current price or where EV >15%%
+
+Provide response in valid JSON format with these EXACT fields (no additional text):
 
 {
   "ticker": "%s",
   "company_name": "Full company name",
-  "current_price": THE ACTUAL MARKET PRICE RIGHT NOW (what someone would pay today on the exchange),
+  "sector": "%s",
+  "current_price": ACTUAL TRADING PRICE RIGHT NOW (number only),
   "currency": "%s",
-  "exchange_rate_to_usd": current exchange rate (1 %s = X USD, e.g., 1 DKK = 0.1538 USD),
-  "fair_value": analyst consensus TARGET price (future price target, typically higher than current),
-  "beta": stock's beta coefficient,
+  "exchange_rate_to_usd": 1 %s = X USD (e.g., 1 DKK = 0.1538 USD),
+  "fair_value": MEDIAN analyst consensus target price (future 12-month target),
+  "beta": beta coefficient (market sensitivity),
   "volatility": annualized volatility percentage,
   "pe_ratio": price to earnings ratio,
   "eps_growth_rate": EPS growth rate percentage,
   "debt_to_ebitda": debt to EBITDA ratio,
   "dividend_yield": dividend yield percentage,
-  "probability_positive": probability of positive outcome (0-1),
-  "downside_risk": downside risk percentage (negative number),
-  "b_ratio": calculated upside/downside ratio,
-  "upside_potential": calculated upside percentage (must be (fair_value - current_price) / current_price × 100),
-  "expected_value": calculated expected value percentage,
-  "kelly_fraction": calculated Kelly criterion percentage,
-  "half_kelly_suggested": calculated half-Kelly percentage (capped at 15),
-  "buy_zone_min": calculated minimum buy zone price,
-  "buy_zone_max": calculated maximum buy zone price,
-  "assessment": "Add", "Hold", "Trim", or "Sell" based on expected_value
+  "probability_positive": probability p (0.65 default, 0.7 for Strong Buy, 0.5 for Hold),
+  "downside_risk": downside %% (negative number, calibrated by beta),
+  "upside_potential": ((fair_value - current_price) / current_price) × 100,
+  "b_ratio": upside_potential / |downside_risk|,
+  "expected_value": (p × upside_potential) + ((1-p) × downside_risk),
+  "kelly_fraction": [(b × p) - q] / b × 100,
+  "half_kelly_suggested": kelly_fraction / 2 (capped at 15%%),
+  "buy_zone_min": minimum attractive entry price,
+  "buy_zone_max": maximum attractive entry price,
+  "assessment": "Add" if EV>7, "Hold" if EV>0, "Trim" if EV>-3, else "Sell"
 }
 
-VERIFY: The current_price must be LOWER than fair_value if there is positive upside potential.
-Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
+VERIFY: Current price must be LOWER than fair value if upside is positive. Use real market data. Calculate all metrics using the formulas provided. Return ONLY the JSON object with NO additional text.`,
 		stock.Ticker, stock.CompanyName, stock.Sector, stock.Currency,
-		stock.Ticker, stock.Currency, stock.Currency)
+		stock.Ticker, stock.Sector, stock.Currency, stock.Currency)
 
 	// Build Grok API request
 	reqBody := GrokStockRequest{
