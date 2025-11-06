@@ -9,33 +9,58 @@ import (
 // CalculateMetrics calculates all derived metrics for a stock
 // These formulas implement the investment strategy's Kelly criterion and EV approach
 func CalculateMetrics(stock *models.Stock) {
-	// Calculate Upside Potential (%)
+	// 1. Calibrate Downside Risk based on Beta (if not manually set)
+	// Beta < 0.5: -15%, Beta 0.5-1: -20%, Beta 1-1.5: -25%, Beta > 1.5: -30%
+	if stock.DownsideRisk == 0 && stock.Beta > 0 {
+		if stock.Beta < 0.5 {
+			stock.DownsideRisk = -15.0
+		} else if stock.Beta < 1.0 {
+			stock.DownsideRisk = -20.0
+		} else if stock.Beta < 1.5 {
+			stock.DownsideRisk = -25.0
+		} else {
+			stock.DownsideRisk = -30.0
+		}
+	}
+
+	// 2. Calculate Upside Potential (%)
 	// Formula: ((Fair Value - Current Price) / Current Price) * 100
-	if stock.CurrentPrice > 0 {
+	if stock.CurrentPrice > 0 && stock.FairValue > 0 {
 		stock.UpsidePotential = ((stock.FairValue - stock.CurrentPrice) / stock.CurrentPrice) * 100
 	}
 
-	// Calculate Expected Value (EV) (%)
-	// Formula: (p * Upside %) + ((1 - p) * Downside %)
-	// This is the probabilistic edge - the core decision metric
-	stock.ExpectedValue = (stock.ProbabilityPositive * stock.UpsidePotential) +
-		((1 - stock.ProbabilityPositive) * stock.DownsideRisk)
+	// 3. Set default probability if not set (0.65 for typical "Buy" rating)
+	if stock.ProbabilityPositive == 0 {
+		stock.ProbabilityPositive = 0.65
+	}
 
-	// Calculate b ratio (Upside/Downside ratio)
+	// 4. Calculate b ratio (Upside/Downside ratio)
 	// Formula: Upside % / |Downside %|
 	if stock.DownsideRisk != 0 {
 		stock.BRatio = stock.UpsidePotential / math.Abs(stock.DownsideRisk)
 	}
 
-	// Calculate Kelly Fraction (f*)
-	// Formula: ((b * p) - (1 - p)) / b
+	// 5. Calculate Expected Value (EV) (%)
+	// Formula: (p * Upside %) + ((1 - p) * Downside %)
+	// This is the probabilistic edge - the core decision metric
+	stock.ExpectedValue = (stock.ProbabilityPositive * stock.UpsidePotential) +
+		((1 - stock.ProbabilityPositive) * stock.DownsideRisk)
+
+	// 6. Calculate Kelly Fraction (f*)
+	// Formula: [(b * p) - q] / b where q = 1 - p
 	// This is the optimal betting fraction according to Kelly criterion
 	if stock.BRatio > 0 {
-		stock.KellyFraction = ((stock.BRatio * stock.ProbabilityPositive) - (1 - stock.ProbabilityPositive)) / stock.BRatio
+		q := 1 - stock.ProbabilityPositive
+		stock.KellyFraction = ((stock.BRatio * stock.ProbabilityPositive) - q) / stock.BRatio
 		stock.KellyFraction = stock.KellyFraction * 100 // Convert to percentage
+		
+		// If f* is negative, set to 0% (no position)
+		if stock.KellyFraction < 0 {
+			stock.KellyFraction = 0
+		}
 	}
 
-	// Calculate Half-Kelly Suggested Weight (%)
+	// 7. Calculate Half-Kelly Suggested Weight (%)
 	// Formula: f* / 2, capped at 15%
 	// Using half-Kelly for more conservative sizing
 	stock.HalfKellySuggested = stock.KellyFraction / 2
@@ -43,13 +68,13 @@ func CalculateMetrics(stock *models.Stock) {
 		stock.HalfKellySuggested = 15 // Cap at 15% max position size
 	}
 
-	// Determine Assessment based on EV
-	// Strategy rules: EV > 7% = Add, EV > 0% = Hold, EV < 0% = Trim/Sell
+	// 8. Determine Assessment based on EV
+	// Strategy rules: EV > 7% = Add, EV > 0% = Hold, EV < -3% = Sell, else Trim
 	if stock.ExpectedValue > 7 {
 		stock.Assessment = "Add"
 	} else if stock.ExpectedValue > 0 {
 		stock.Assessment = "Hold"
-	} else if stock.ExpectedValue > -5 {
+	} else if stock.ExpectedValue > -3 {
 		stock.Assessment = "Trim"
 	} else {
 		stock.Assessment = "Sell"

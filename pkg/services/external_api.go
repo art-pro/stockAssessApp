@@ -19,6 +19,47 @@ type ExternalAPIService struct {
 	exchangeRateCache map[string]float64 // Cache for exchange rates from Grok
 }
 
+// AlphaVantageQuote represents Alpha Vantage real-time quote data
+type AlphaVantageQuote struct {
+	GlobalQuote struct {
+		Symbol           string `json:"01. symbol"`
+		Open             string `json:"02. open"`
+		High             string `json:"03. high"`
+		Low              string `json:"04. low"`
+		Price            string `json:"05. price"`
+		Volume           string `json:"06. volume"`
+		LatestTradingDay string `json:"07. latest trading day"`
+		PreviousClose    string `json:"08. previous close"`
+		Change           string `json:"09. change"`
+		ChangePercent    string `json:"10. change percent"`
+	} `json:"Global Quote"`
+}
+
+// AlphaVantageOverview represents company overview data with fundamentals
+type AlphaVantageOverview struct {
+	Symbol                     string `json:"Symbol"`
+	Name                       string `json:"Name"`
+	Description                string `json:"Description"`
+	Sector                     string `json:"Sector"`
+	MarketCapitalization       string `json:"MarketCapitalization"`
+	PERatio                    string `json:"PERatio"`
+	PEGRatio                   string `json:"PEGRatio"`
+	Beta                       string `json:"Beta"`
+	DividendYield              string `json:"DividendYield"`
+	EPS                        string `json:"EPS"`
+	RevenuePerShareTTM         string `json:"RevenuePerShareTTM"`
+	ProfitMargin               string `json:"ProfitMargin"`
+	AnalystTargetPrice         string `json:"AnalystTargetPrice"`
+	TrailingPE                 string `json:"TrailingPE"`
+	ForwardPE                  string `json:"ForwardPE"`
+	PriceToSalesRatioTTM       string `json:"PriceToSalesRatioTTM"`
+	PriceToBookRatio           string `json:"PriceToBookRatio"`
+	EVToRevenue                string `json:"EVToRevenue"`
+	EVToEBITDA                 string `json:"EVToEBITDA"`
+	QuarterlyEarningsGrowthYOY string `json:"QuarterlyEarningsGrowthYOY"`
+	QuarterlyRevenueGrowthYOY  string `json:"QuarterlyRevenueGrowthYOY"`
+}
+
 // NewExternalAPIService creates a new external API service
 func NewExternalAPIService(cfg *config.Config) *ExternalAPIService {
 	return &ExternalAPIService{
@@ -70,6 +111,72 @@ type Choice struct {
 	FinishReason string  `json:"finish_reason"`
 }
 
+// FetchAlphaVantageQuote fetches real-time price from Alpha Vantage
+func (s *ExternalAPIService) FetchAlphaVantageQuote(ticker string) (*AlphaVantageQuote, error) {
+	if s.cfg.AlphaVantageAPIKey == "" {
+		return nil, fmt.Errorf("Alpha Vantage API key not configured")
+	}
+
+	url := fmt.Sprintf("https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=%s&apikey=%s",
+		ticker, s.cfg.AlphaVantageAPIKey)
+
+	resp, err := s.client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch quote: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var quote AlphaVantageQuote
+	if err := json.NewDecoder(resp.Body).Decode(&quote); err != nil {
+		return nil, fmt.Errorf("failed to decode quote: %w", err)
+	}
+
+	// Check if we got valid data
+	if quote.GlobalQuote.Symbol == "" {
+		return nil, fmt.Errorf("no data returned for ticker %s", ticker)
+	}
+
+	return &quote, nil
+}
+
+// FetchAlphaVantageOverview fetches company fundamentals from Alpha Vantage
+func (s *ExternalAPIService) FetchAlphaVantageOverview(ticker string) (*AlphaVantageOverview, error) {
+	if s.cfg.AlphaVantageAPIKey == "" {
+		return nil, fmt.Errorf("Alpha Vantage API key not configured")
+	}
+
+	url := fmt.Sprintf("https://www.alphavantage.co/query?function=OVERVIEW&symbol=%s&apikey=%s",
+		ticker, s.cfg.AlphaVantageAPIKey)
+
+	resp, err := s.client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch overview: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var overview AlphaVantageOverview
+	if err := json.NewDecoder(resp.Body).Decode(&overview); err != nil {
+		return nil, fmt.Errorf("failed to decode overview: %w", err)
+	}
+
+	// Check if we got valid data
+	if overview.Symbol == "" {
+		return nil, fmt.Errorf("no data returned for ticker %s", ticker)
+	}
+
+	return &overview, nil
+}
+
+// parseFloat safely parses a string to float64, returning 0 on error
+func parseFloat(s string) float64 {
+	if s == "" || s == "None" || s == "-" {
+		return 0
+	}
+	var f float64
+	fmt.Sscanf(s, "%f", &f)
+	return f
+}
+
 // StockAnalysis represents the parsed stock data from Grok
 type StockAnalysis struct {
 	Ticker              string  `json:"ticker"`
@@ -96,11 +203,75 @@ type StockAnalysis struct {
 	Assessment          string  `json:"assessment"`
 }
 
-// FetchAllStockData fetches all stock data from Grok API in one call
+// FetchAllStockData fetches all stock data using Alpha Vantage (primary) and Grok (analysis)
 func (s *ExternalAPIService) FetchAllStockData(stock *models.Stock) error {
-	// Check if API key is configured
+	var dataSource string
+	var fairValueSource string
+	
+	// Step 1: Try to fetch real-time data from Alpha Vantage (most accurate)
+	if s.cfg.AlphaVantageAPIKey != "" {
+		fmt.Printf("Fetching Alpha Vantage data for %s...\n", stock.Ticker)
+		
+		// Fetch current price
+		quote, err := s.FetchAlphaVantageQuote(stock.Ticker)
+		if err == nil && quote.GlobalQuote.Price != "" {
+			stock.CurrentPrice = parseFloat(quote.GlobalQuote.Price)
+			dataSource = "Alpha Vantage"
+			fmt.Printf("✓ Current price from Alpha Vantage: %.2f\n", stock.CurrentPrice)
+		} else {
+			fmt.Printf("⚠ Alpha Vantage quote error: %v\n", err)
+		}
+		
+		// Fetch fundamentals (beta, fair value, etc.)
+		overview, err := s.FetchAlphaVantageOverview(stock.Ticker)
+		if err == nil && overview.Symbol != "" {
+			// Update beta
+			if overview.Beta != "" && overview.Beta != "None" {
+				stock.Beta = parseFloat(overview.Beta)
+				fmt.Printf("✓ Beta from Alpha Vantage: %.2f\n", stock.Beta)
+			}
+			
+			// Update fair value from analyst target price
+			if overview.AnalystTargetPrice != "" && overview.AnalystTargetPrice != "None" {
+				stock.FairValue = parseFloat(overview.AnalystTargetPrice)
+				fairValueSource = fmt.Sprintf("Alpha Vantage Consensus, %s", time.Now().Format("Jan 2, 2006"))
+				fmt.Printf("✓ Fair value from Alpha Vantage: %.2f\n", stock.FairValue)
+			}
+			
+			// Update other fundamentals
+			stock.PERatio = parseFloat(overview.PERatio)
+			stock.DividendYield = parseFloat(overview.DividendYield)
+			
+			// Calculate EPS growth from quarterly data
+			if overview.QuarterlyEarningsGrowthYOY != "" {
+				stock.EPSGrowthRate = parseFloat(overview.QuarterlyEarningsGrowthYOY) * 100
+			}
+			
+			// Update sector if provided
+			if overview.Sector != "" {
+				stock.Sector = overview.Sector
+			}
+		} else {
+			fmt.Printf("⚠ Alpha Vantage overview error: %v\n", err)
+		}
+		
+		// If we got basic data from Alpha Vantage, use it
+		if stock.CurrentPrice > 0 {
+			stock.DataSource = dataSource
+			if fairValueSource != "" {
+				stock.FairValueSource = fairValueSource
+			}
+			
+			// Use CalculateMetrics to compute derived values
+			CalculateMetrics(stock)
+			stock.LastUpdated = time.Now()
+			return nil
+		}
+	}
+	
+	// Step 2: If Alpha Vantage not available or failed, try Grok
 	if s.cfg.XAIAPIKey == "" {
-		// Fallback to mock data for development
+		// No APIs configured - return error
 		return s.mockStockData(stock)
 	}
 
@@ -110,9 +281,12 @@ func (s *ExternalAPIService) FetchAllStockData(stock *models.Stock) error {
 Provide a COMPLETE financial analysis including raw data AND calculated investment metrics.
 
 CRITICAL DEFINITIONS:
-- "current_price" = ACTUAL TRADING PRICE RIGHT NOW on the stock exchange (NOT the target/fair value)
-- "fair_value" = Analyst consensus TARGET price (what analysts think it should reach)
-- These are DIFFERENT values. Current price is what you can buy it for TODAY.
+- "current_price" = ACTUAL TRADING PRICE RIGHT NOW on the stock exchange (real-time market price)
+- "fair_value" = MEDIAN ANALYST CONSENSUS TARGET PRICE from sources like TipRanks, Yahoo Finance, or Bloomberg
+  * This should be the MEDIAN (not mean or high) of all analyst 12-month price targets
+  * Source this from reliable consensus data, NOT a single analyst estimate
+  * If multiple sources differ, use the most conservative (lower) target
+- These are DIFFERENT values. Current price is what you can buy TODAY. Fair value is future target.
 
 IMPORTANT FORMULAS:
 - upside_potential = ((fair_value - current_price) / current_price) × 100
@@ -260,16 +434,23 @@ Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
 	stock.DividendYield = analysis.DividendYield
 	stock.ProbabilityPositive = analysis.ProbabilityPositive
 	stock.DownsideRisk = analysis.DownsideRisk
+	
+	// Set data source
+	stock.DataSource = "Grok AI"
+	stock.FairValueSource = fmt.Sprintf("Grok AI Analysis, %s", time.Now().Format("Jan 2, 2006"))
+	stock.LastUpdated = time.Now()
 
-	// Use Grok's calculated metrics (no need to calculate locally!)
-	stock.UpsidePotential = analysis.UpsidePotential
-	stock.BRatio = analysis.BRatio
-	stock.ExpectedValue = analysis.ExpectedValue
-	stock.KellyFraction = analysis.KellyFraction
-	stock.HalfKellySuggested = analysis.HalfKellySuggested
-	stock.BuyZoneMin = analysis.BuyZoneMin
-	stock.BuyZoneMax = analysis.BuyZoneMax
-	stock.Assessment = analysis.Assessment
+	// Validate fair value (warn if it seems inflated)
+	if stock.FairValue > 0 && stock.CurrentPrice > 0 {
+		upsidePercent := ((stock.FairValue - stock.CurrentPrice) / stock.CurrentPrice) * 100
+		if upsidePercent > 100 {
+			fmt.Printf("⚠️ WARNING: Fair value %.2f for %s seems inflated (%.1f%% upside). Please verify consensus target.\n",
+				stock.FairValue, stock.Ticker, upsidePercent)
+		}
+	}
+
+	// Recalculate metrics using our corrected formulas
+	CalculateMetrics(stock)
 
 	// Store exchange rate for later use (will be retrieved by FetchExchangeRate)
 	s.cacheExchangeRate(stock.Currency, analysis.ExchangeRateToUSD)
@@ -277,7 +458,7 @@ Calculate ALL fields using the formulas provided. Return ONLY the JSON object.`,
 	return nil
 }
 
-// mockStockData provides N/A values when Grok data is not available
+// mockStockData provides N/A values when no API is available
 func (s *ExternalAPIService) mockStockData(stock *models.Stock) error {
 	// Set all values to 0 or empty to indicate data is not available (N/A)
 	// These will be displayed as "N/A" in the frontend
@@ -299,12 +480,15 @@ func (s *ExternalAPIService) mockStockData(stock *models.Stock) error {
 	stock.BuyZoneMin = 0
 	stock.BuyZoneMax = 0
 	stock.Assessment = "N/A"
+	stock.DataSource = "None"
+	stock.FairValueSource = "Not available"
+	stock.LastUpdated = time.Now()
 
 	// Cache mock exchange rate
 	mockExchangeRate := s.getMockExchangeRate(stock.Currency)
 	s.cacheExchangeRate(stock.Currency, mockExchangeRate)
 
-	return fmt.Errorf("Grok API not configured - stock data unavailable")
+	return fmt.Errorf("no API configured - stock data unavailable")
 }
 
 // getMockExchangeRate returns a mock exchange rate for a currency

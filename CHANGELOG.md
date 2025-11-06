@@ -36,3 +36,4 @@
 - Improved N/A formatting for all numeric fields
 - Auto-refresh on 404 errors with user notification
 
+

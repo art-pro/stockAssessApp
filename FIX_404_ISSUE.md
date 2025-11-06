@@ -32,3 +32,4 @@ SELECT id, ticker, company_name FROM stocks;
 - If backend database is reset/cleared, IDs no longer match
 - Refreshing the page fetches fresh data from backend
 
+
