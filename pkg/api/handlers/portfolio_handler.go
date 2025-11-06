@@ -110,7 +110,26 @@ func (h *PortfolioHandler) GetAPIStatus(c *gin.Context) {
 			"configured": h.cfg.XAIAPIKey != "",
 			"status":     "unknown",
 		},
+		"alpha_vantage": gin.H{
+			"configured": h.cfg.AlphaVantageAPIKey != "",
+			"status":     "unknown",
+		},
 		"timestamp": time.Now(),
+	}
+
+	// Test Alpha Vantage connection if configured
+	if h.cfg.AlphaVantageAPIKey != "" {
+		// Try a simple quote fetch
+		_, err := h.apiService.FetchAlphaVantageQuote("AAPL")
+		if err != nil {
+			status["alpha_vantage"].(gin.H)["status"] = "error"
+			status["alpha_vantage"].(gin.H)["error"] = err.Error()
+		} else {
+			status["alpha_vantage"].(gin.H)["status"] = "connected"
+		}
+	} else {
+		status["alpha_vantage"].(gin.H)["status"] = "not_configured"
+		status["alpha_vantage"].(gin.H)["message"] = "Add ALPHA_VANTAGE_API_KEY to .env for real-time financial data"
 	}
 
 	// Test Grok connection if configured
