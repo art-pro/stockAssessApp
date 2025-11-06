@@ -66,6 +66,7 @@ func (h *StockHandler) GetStock(c *gin.Context) {
 // CreateStockRequest represents request to create a stock
 type CreateStockRequest struct {
 	Ticker              string  `json:"ticker" binding:"required"`
+	ISIN                string  `json:"isin"`                 // International Securities Identification Number (optional)
 	CompanyName         string  `json:"company_name" binding:"required"`
 	Sector              string  `json:"sector" binding:"required"`
 	Currency            string  `json:"currency"`
@@ -92,6 +93,7 @@ func (h *StockHandler) CreateStock(c *gin.Context) {
 
 	stock := models.Stock{
 		Ticker:              req.Ticker,
+		ISIN:                req.ISIN,
 		CompanyName:         req.CompanyName,
 		Sector:              req.Sector,
 		Currency:            req.Currency,
@@ -372,6 +374,14 @@ func (h *StockHandler) UpdateStockField(c *gin.Context) {
 			stock.UpdateFrequency = strVal
 			fieldUpdated = true
 		}
+	case "isin":
+		if req.StringValue != "" {
+			stock.ISIN = req.StringValue
+			fieldUpdated = true
+		} else if strVal, ok := req.Value.(string); ok {
+			stock.ISIN = strVal
+			fieldUpdated = true
+		}
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid field name"})
 		return
@@ -385,7 +395,7 @@ func (h *StockHandler) UpdateStockField(c *gin.Context) {
 	stock.LastUpdated = time.Now()
 
 	// Recalculate all derived metrics (only if numeric fields changed)
-	if req.Field != "comment" && req.Field != "company_name" && req.Field != "sector" && req.Field != "update_frequency" {
+	if req.Field != "comment" && req.Field != "company_name" && req.Field != "sector" && req.Field != "update_frequency" && req.Field != "isin" {
 		services.CalculateMetrics(&stock)
 
 		// Get FX rate for USD conversion

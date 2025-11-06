@@ -313,7 +313,12 @@ Key principles:
 
 4. Sector targets: Healthcare 30–35%%, Technology 15%%, Energy 8–10%%, Financials 5–7%%, Industrials 3–4%%, Consumer Staples 8–10%%, REITs 5–7%%, Cash 8–12%%.
 
-Analyze the stock %s (%s) in the %s sector with currency %s.
+Analyze the following stock (use ISIN and ticker together to ensure correct security identification):
+- Ticker: %s
+- ISIN: %s
+- Company Name: %s
+- Sector: %s
+- Currency: %s
 
 CRITICAL REQUIREMENTS:
 - "current_price" = ACTUAL REAL-TIME TRADING PRICE on the stock exchange (what you can buy TODAY)
@@ -352,7 +357,7 @@ Provide response in valid JSON format with these EXACT fields (no additional tex
 }
 
 VERIFY: Current price must be LOWER than fair value if upside is positive. Use real market data. Calculate all metrics using the formulas provided. Return ONLY the JSON object with NO additional text.`,
-		stock.Ticker, stock.CompanyName, stock.Sector, stock.Currency,
+		stock.Ticker, stock.ISIN, stock.CompanyName, stock.Sector, stock.Currency,
 		stock.Ticker, stock.Sector, stock.Currency, stock.Currency)
 
 	// Build Grok API request
@@ -710,7 +715,12 @@ Key principles:
 
 4. Sector targets: Healthcare 30–35%%, Technology 15%%, Energy 8–10%%, Financials 5–7%%, Industrials 3–4%%, Consumer Staples 8–10%%, REITs 5–7%%, Cash 8–12%%.
 
-Analyze the stock %s (%s) in the %s sector with currency %s.
+Analyze the following stock (use ISIN and ticker together to ensure correct security identification):
+- Ticker: %s
+- ISIN: %s
+- Company Name: %s
+- Sector: %s
+- Currency: %s
 
 CRITICAL REQUIREMENTS:
 - "current_price" = ACTUAL REAL-TIME TRADING PRICE on the stock exchange (what you can buy TODAY)
@@ -752,7 +762,7 @@ Return ONLY valid JSON (no markdown, no extra text):
   "exchange_rate_to_usd": <rate if non-USD>,
   "fair_value_source": "<source, date>",
   "data_source": "Grok AI"
-}`, stock.Ticker, stock.CompanyName, stock.Sector, stock.Currency, stock.Sector, stock.Currency)
+}`, stock.Ticker, stock.ISIN, stock.CompanyName, stock.Sector, stock.Currency, stock.Sector, stock.Currency)
 
 	req := GrokStockRequest{
 		Model: "grok-4-fast-reasoning",

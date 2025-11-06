@@ -19,6 +19,7 @@ type User struct {
 type Stock struct {
 	ID                     uint      `gorm:"primarykey" json:"id"`
 	Ticker                 string    `gorm:"not null;index" json:"ticker"`
+	ISIN                   string    `gorm:"index" json:"isin"`            // International Securities Identification Number
 	CompanyName            string    `gorm:"not null" json:"company_name"`
 	Sector                 string    `json:"sector"`
 	CurrentPrice           float64   `json:"current_price"`            // In local currency
