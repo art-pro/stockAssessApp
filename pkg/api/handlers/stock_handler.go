@@ -537,16 +537,28 @@ func (h *StockHandler) updateStockDataWithSource(stock *models.Stock, source str
 	oldEV := stock.ExpectedValue
 
 	var err error
+	now := time.Now()
 	switch source {
 	case "grok":
 		// Fetch only from Grok (interpretive/analytical data)
 		err = h.apiService.FetchFromGrok(stock)
+		if err == nil {
+			stock.GrokFetchedAt = &now
+		}
 	case "alphavantage":
 		// Fetch only from Alpha Vantage (raw financial data)
 		err = h.apiService.FetchFromAlphaVantage(stock)
+		if err == nil {
+			stock.AlphaVantageFetchedAt = &now
+		}
 	default:
 		// Auto mode: try Alpha Vantage first, then Grok
 		err = h.apiService.FetchAllStockData(stock)
+		if err == nil {
+			// In auto mode, both sources might have been updated
+			stock.AlphaVantageFetchedAt = &now
+			stock.GrokFetchedAt = &now
+		}
 	}
 
 	if err != nil {

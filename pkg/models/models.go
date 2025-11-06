@@ -47,10 +47,12 @@ type Stock struct {
 	BuyZoneMax             float64   `json:"buy_zone_max"`             // Maximum price for buy zone
 	Assessment             string    `json:"assessment"`               // Hold/Add/Trim/Sell
 	UpdateFrequency        string    `json:"update_frequency"`         // daily/weekly/monthly/manually
-	DataSource             string    `json:"data_source"`              // Source of data (e.g., "Grok", "Alpha Vantage", "Manual")
-	FairValueSource        string    `json:"fair_value_source"`        // Source of fair value (e.g., "TipRanks, Nov 5, 2025")
-	Comment                string    `gorm:"type:text" json:"comment"` // User notes and memos for this stock
-	LastUpdated            time.Time `json:"last_updated"`
+	DataSource             string     `json:"data_source"`              // Source of data (e.g., "Grok", "Alpha Vantage", "Manual")
+	FairValueSource        string     `json:"fair_value_source"`        // Source of fair value (e.g., "TipRanks, Nov 5, 2025")
+	AlphaVantageFetchedAt  *time.Time `json:"alpha_vantage_fetched_at"` // When data was last fetched from Alpha Vantage
+	GrokFetchedAt          *time.Time `json:"grok_fetched_at"`          // When data was last fetched from Grok
+	Comment                string     `gorm:"type:text" json:"comment"` // User notes and memos for this stock
+	LastUpdated            time.Time  `json:"last_updated"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`
 }
