@@ -182,7 +182,7 @@ curl -X POST https://api.x.ai/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $XAI_API_KEY" \
   -d '{
-    "model": "grok-4-latest",
+    "model": "grok-beta",
     "messages": [
       {"role": "system", "content": "You are a helpful assistant."},
       {"role": "user", "content": "Say hello"}
