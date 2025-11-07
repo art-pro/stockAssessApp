@@ -45,6 +45,11 @@ func InitScheduler(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) {
 
 // updateStocksWithFrequency updates all stocks with the specified frequency
 func updateStocksWithFrequency(db *gorm.DB, apiService *services.ExternalAPIService, logger zerolog.Logger, frequency string) {
+	// Skip if frequency is "manually" - these stocks are only updated by user action
+	if frequency == "manually" {
+		return
+	}
+	
 	var stocks []models.Stock
 	if err := db.Where("update_frequency = ?", frequency).Find(&stocks).Error; err != nil {
 		logger.Error().Err(err).Str("frequency", frequency).Msg("Failed to fetch stocks for update")
