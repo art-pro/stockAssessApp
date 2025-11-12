@@ -691,7 +691,7 @@ func (h *StockHandler) RestoreStock(c *gin.Context) {
 	c.JSON(http.StatusOK, stock)
 }
 
-// ExportCSV exports all stocks to CSV
+// ExportCSV exports all stocks and cash holdings to CSV
 func (h *StockHandler) ExportCSV(c *gin.Context) {
 	var stocks []models.Stock
 	if err := h.db.Find(&stocks).Error; err != nil {
@@ -700,14 +700,24 @@ func (h *StockHandler) ExportCSV(c *gin.Context) {
 		return
 	}
 
+	var cashHoldings []models.CashHolding
+	if err := h.db.Find(&cashHoldings).Error; err != nil {
+		h.logger.Error().Err(err).Msg("Failed to fetch cash holdings")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch cash holdings"})
+		return
+	}
+
 	c.Header("Content-Type", "text/csv")
-	c.Header("Content-Disposition", "attachment;filename=stocks.csv")
+	c.Header("Content-Disposition", "attachment;filename=portfolio_export.csv")
 
 	writer := csv.NewWriter(c.Writer)
 	defer writer.Flush()
 
-	// Write header
-	header := []string{
+	// Write stocks section header
+	writer.Write([]string{"=== STOCKS ==="})
+	
+	// Write stocks header
+	stockHeader := []string{
 		"Ticker", "Company Name", "Sector", "Current Price", "Currency", "Fair Value",
 		"Upside Potential (%)", "Downside Risk (%)", "Probability Positive", "Expected Value (%)",
 		"Beta", "Volatility (%)", "P/E Ratio", "EPS Growth Rate (%)", "Debt to EBITDA",
@@ -715,9 +725,9 @@ func (h *StockHandler) ExportCSV(c *gin.Context) {
 		"Shares Owned", "Avg Price", "Current Value USD", "Weight (%)", "Unrealized P&L",
 		"Buy Zone Min", "Buy Zone Max", "Assessment",
 	}
-	writer.Write(header)
+	writer.Write(stockHeader)
 
-	// Write data
+	// Write stock data
 	for _, stock := range stocks {
 		row := []string{
 			stock.Ticker, stock.CompanyName, stock.Sector,
@@ -747,6 +757,39 @@ func (h *StockHandler) ExportCSV(c *gin.Context) {
 		}
 		writer.Write(row)
 	}
+
+	// Add empty row separator
+	writer.Write([]string{})
+	
+	// Write cash holdings section header
+	writer.Write([]string{"=== CASH HOLDINGS ==="})
+	
+	// Write cash header
+	cashHeader := []string{
+		"Currency", "Amount", "USD Value", "Description", "Last Updated",
+	}
+	writer.Write(cashHeader)
+
+	// Write cash data
+	for _, cash := range cashHoldings {
+		row := []string{
+			cash.CurrencyCode,
+			strconv.FormatFloat(cash.Amount, 'f', 2, 64),
+			strconv.FormatFloat(cash.USDValue, 'f', 2, 64),
+			cash.Description,
+			cash.LastUpdated.Format("2006-01-02 15:04:05"),
+		}
+		writer.Write(row)
+	}
+
+	// Calculate and write total cash value
+	totalCashUSD := 0.0
+	for _, cash := range cashHoldings {
+		totalCashUSD += cash.USDValue
+	}
+	
+	writer.Write([]string{})
+	writer.Write([]string{"Total Available Cash (USD)", strconv.FormatFloat(totalCashUSD, 'f', 2, 64)})
 }
 
 // ImportCSV imports stocks from CSV

@@ -39,6 +39,7 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 	authHandler := handlers.NewAuthHandler(db, cfg, logger)
 	stockHandler := handlers.NewStockHandler(db, cfg, logger)
 	portfolioHandler := handlers.NewPortfolioHandler(db, cfg, logger)
+	cashHandler := handlers.NewCashHandler(db, cfg, logger)
 
 	// Public routes
 	public := router.Group("/api")
@@ -98,6 +99,13 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 		// Alerts routes
 		protected.GET("/alerts", portfolioHandler.GetAlerts)
 		protected.DELETE("/alerts/:id", portfolioHandler.DeleteAlert)
+		
+		// Cash holdings routes
+		protected.GET("/cash", cashHandler.GetAllCashHoldings)
+		protected.POST("/cash", cashHandler.CreateCashHolding)
+		protected.PUT("/cash/:id", cashHandler.UpdateCashHolding)
+		protected.DELETE("/cash/:id", cashHandler.DeleteCashHolding)
+		protected.POST("/cash/refresh", cashHandler.RefreshUSDValues)
 	}
 
 	return router
