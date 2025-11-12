@@ -38,7 +38,24 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 
 	// Add explicit OPTIONS handler for preflight requests
 	router.OPTIONS("/*path", func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		// Check if origin is in our allowed list
+		allowedOrigins := []string{
+			cfg.FrontendURL,
+			"http://localhost:3000",
+			"https://stock-frontend-silk.vercel.app",
+			"https://stock-frontend-artpros-projects.vercel.app",
+			"https://www.artpro.dev",
+			"https://artpro.dev",
+		}
+		
+		for _, allowedOrigin := range allowedOrigins {
+			if origin == allowedOrigin {
+				c.Header("Access-Control-Allow-Origin", origin)
+				break
+			}
+		}
+		
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Requested-With")
 		c.Header("Access-Control-Allow-Credentials", "true")

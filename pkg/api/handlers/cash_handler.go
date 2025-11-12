@@ -228,25 +228,39 @@ func (h *CashHandler) RefreshUSDValues(c *gin.Context) {
 
 // calculateUSDValue converts amount from given currency to USD
 func (h *CashHandler) calculateUSDValue(currencyCode string, amount float64) (float64, error) {
+	// If EUR (base currency), convert to USD using USD rate
+	if currencyCode == "EUR" {
+		var usdRate models.ExchangeRate
+		if err := h.db.Where("currency_code = ?", "USD").First(&usdRate).Error; err != nil {
+			// If USD rate not found, assume 1:1 for development
+			h.logger.Warn().Msg("USD exchange rate not found, using 1:1")
+			return amount, nil
+		}
+		// EUR to USD: multiply by USD rate
+		return amount * usdRate.Rate, nil
+	}
+
+	// If USD, return as is
 	if currencyCode == "USD" {
 		return amount, nil
 	}
 
-	// Get exchange rate for the currency (relative to EUR)
+	// For other currencies, convert via EUR base
 	var exchangeRate models.ExchangeRate
 	if err := h.db.Where("currency_code = ?", currencyCode).First(&exchangeRate).Error; err != nil {
-		return 0, err
+		h.logger.Warn().Str("currency", currencyCode).Msg("Exchange rate not found")
+		return amount, nil // Return original amount if no rate found
 	}
 
-	// Get USD to EUR rate
+	// Convert to EUR first (amount / rate), then to USD
 	var usdRate models.ExchangeRate
 	if err := h.db.Where("currency_code = ?", "USD").First(&usdRate).Error; err != nil {
-		return 0, err
+		// If USD rate not found, return EUR equivalent
+		h.logger.Warn().Msg("USD exchange rate not found, returning EUR equivalent")
+		return amount / exchangeRate.Rate, nil
 	}
 
 	// Convert: amount in currency -> EUR -> USD
-	// amount / exchangeRate.Rate = amount in EUR
-	// amountInEUR * usdRate.Rate = amount in USD
 	amountInEUR := amount / exchangeRate.Rate
 	usdValue := amountInEUR * usdRate.Rate
 
