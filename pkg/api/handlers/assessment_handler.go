@@ -147,8 +147,14 @@ func (h *AssessmentHandler) generateGrokAssessment(ticker string) (string, error
 		return "", fmt.Errorf("Grok AI API key not configured")
 	}
 
+	// Fetch portfolio data for context
+	portfolioData, cashData, err := h.fetchPortfolioContext()
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("Failed to fetch portfolio context, continuing without it")
+	}
+
 	// Create the comprehensive prompt based on your strategy
-	prompt := h.buildAssessmentPrompt(ticker)
+	prompt := h.buildAssessmentPrompt(ticker, portfolioData, cashData)
 
 	// Build Grok API request
 	reqBody := map[string]interface{}{
@@ -230,8 +236,14 @@ func (h *AssessmentHandler) generateDeepseekAssessment(ticker string) (string, e
 		return "", fmt.Errorf("Deepseek AI API key not configured")
 	}
 
+	// Fetch portfolio data for context
+	portfolioData, cashData, err := h.fetchPortfolioContext()
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("Failed to fetch portfolio context, continuing without it")
+	}
+
 	// Create the comprehensive prompt based on your strategy
-	prompt := h.buildAssessmentPrompt(ticker)
+	prompt := h.buildAssessmentPrompt(ticker, portfolioData, cashData)
 
 	// Build Deepseek API request
 	reqBody := map[string]interface{}{
@@ -307,8 +319,102 @@ func (h *AssessmentHandler) generateDeepseekAssessment(ticker string) (string, e
 	return content, nil
 }
 
+// fetchPortfolioContext retrieves current portfolio and cash data for assessment context
+func (h *AssessmentHandler) fetchPortfolioContext() ([]models.Stock, []models.CashHolding, error) {
+	// Fetch owned stocks (portfolio)
+	var portfolioStocks []models.Stock
+	if err := h.db.Where("shares_owned > 0").Find(&portfolioStocks).Error; err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch portfolio stocks: %w", err)
+	}
+
+	// Fetch cash holdings
+	var cashHoldings []models.CashHolding
+	if err := h.db.Find(&cashHoldings).Error; err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch cash holdings: %w", err)
+	}
+
+	return portfolioStocks, cashHoldings, nil
+}
+
+// buildPortfolioContext creates a formatted string describing the current portfolio
+func (h *AssessmentHandler) buildPortfolioContext(portfolio []models.Stock, cashHoldings []models.CashHolding) string {
+	context := "\n\n## CURRENT PORTFOLIO CONTEXT\n\n"
+	
+	if len(portfolio) == 0 {
+		context += "**Current Portfolio:** Empty (no owned stocks)\n\n"
+	} else {
+		context += "**Current Portfolio (Owned Stocks):**\n\n"
+		context += "| Ticker | Company | Sector | Shares | Avg Price | Current Price | Position Value | Weight | EV | Assessment |\n"
+		context += "|--------|---------|--------|--------|-----------|---------------|----------------|--------|----|------------|\n"
+		
+		totalPortfolioValue := 0.0
+		for _, stock := range portfolio {
+			positionValue := float64(stock.SharesOwned) * stock.CurrentPrice
+			totalPortfolioValue += positionValue
+		}
+		
+		sectorAllocations := make(map[string]float64)
+		
+		for _, stock := range portfolio {
+			positionValue := float64(stock.SharesOwned) * stock.CurrentPrice
+			weightPercent := (positionValue / totalPortfolioValue) * 100
+			
+			context += fmt.Sprintf("| %s | %s | %s | %d | €%.2f | €%.2f | €%.0f | %.1f%% | %.1f%% | %s |\n",
+				stock.Ticker,
+				stock.CompanyName,
+				stock.Sector,
+				stock.SharesOwned,
+				stock.AvgPriceLocal,
+				stock.CurrentPrice,
+				positionValue,
+				weightPercent,
+				stock.ExpectedValue,
+				stock.Assessment)
+			
+			// Track sector allocations
+			sectorAllocations[stock.Sector] += weightPercent
+		}
+		
+		context += "\n**Current Sector Allocations:**\n"
+		for sector, allocation := range sectorAllocations {
+			context += fmt.Sprintf("- %s: %.1f%%\n", sector, allocation)
+		}
+		context += fmt.Sprintf("\n**Total Portfolio Value:** €%.0f\n", totalPortfolioValue)
+	}
+	
+	// Add cash holdings
+	if len(cashHoldings) == 0 {
+		context += "\n**Available Cash:** No cash holdings recorded\n"
+	} else {
+		context += "\n**Available Cash:**\n"
+		totalCash := 0.0
+		for _, cash := range cashHoldings {
+			if cash.CurrencyCode == "EUR" {
+				// For EUR (base currency), use actual amount
+				context += fmt.Sprintf("- %s: %.0f (€%.0f)\n", cash.CurrencyCode, cash.Amount, cash.Amount)
+				totalCash += cash.Amount
+			} else {
+				// For other currencies, show both original and EUR value
+				context += fmt.Sprintf("- %s: %.0f (€%.0f)\n", cash.CurrencyCode, cash.Amount, cash.USDValue)
+				totalCash += cash.USDValue
+			}
+		}
+		context += fmt.Sprintf("\n**Total Available Cash:** €%.0f\n", totalCash)
+	}
+	
+	context += "\n**IMPORTANT:** Consider this portfolio context when making recommendations. Analyze:\n"
+	context += "- How this new position would affect sector diversification\n"
+	context += "- Whether current sector allocations exceed targets (Healthcare 30-35%, Tech 15%, etc.)\n"
+	context += "- If sufficient cash is available for the recommended position size\n"
+	context += "- How this fits with the overall portfolio risk and Kelly utilization\n"
+	
+	return context
+}
+
 // buildAssessmentPrompt creates the comprehensive prompt for stock assessment
-func (h *AssessmentHandler) buildAssessmentPrompt(ticker string) string {
+func (h *AssessmentHandler) buildAssessmentPrompt(ticker string, portfolio []models.Stock, cashHoldings []models.CashHolding) string {
+	// Build portfolio context string
+	portfolioContext := h.buildPortfolioContext(portfolio, cashHoldings)
 	return fmt.Sprintf(`You are a financial advisor and investment consultant using a probabilistic strategy. For the stock %s, follow these steps:
 
 1. Collect data: current price, fair value (median consensus target), upside %% = ((fair value - current price) / current price) * 100, downside %% (calibrate by beta: -15%% <0.5, -20%% 0.5–1, -25%% 1–1.5, -30%% >1.5), p (0.5–0.7 based on ratings), volatility, P/E, EPS growth, debt-to-EBITDA, dividend yield.
@@ -389,5 +495,7 @@ Please provide a detailed assessment for %s following the template format simila
 - Risk Management Notes
 - Final Assessment
 
-Use real market data and provide specific numbers for all calculations. Be conservative with probability estimates and avoid hype.`, ticker, ticker)
+Use real market data and provide specific numbers for all calculations. Be conservative with probability estimates and avoid hype.
+
+%s`, ticker, ticker, portfolioContext)
 }
