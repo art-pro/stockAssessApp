@@ -63,6 +63,7 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 		// Auth routes
 		protected.POST("/logout", authHandler.Logout)
 		protected.POST("/change-password", authHandler.ChangePassword)
+		protected.POST("/change-username", authHandler.ChangeUsername)
 		protected.GET("/me", authHandler.GetCurrentUser)
 
 		// Stock routes

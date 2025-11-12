@@ -138,6 +138,64 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Password changed successfully"})
 }
 
+// ChangeUsernameRequest represents username change request
+type ChangeUsernameRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewUsername     string `json:"new_username" binding:"required,min=3"`
+}
+
+// ChangeUsername handles username change
+func (h *AuthHandler) ChangeUsername(c *gin.Context) {
+	userID, _ := c.Get("user_id")
+	
+	var req ChangeUsernameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request, username must be at least 3 characters"})
+		return
+	}
+
+	// Get user
+	var user models.User
+	if err := h.db.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	// Verify current password
+	if err := auth.CheckPassword(user.Password, req.CurrentPassword); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Current password is incorrect"})
+		return
+	}
+
+	// Check if new username is the same as current
+	if req.NewUsername == user.Username {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "New username must be different from current username"})
+		return
+	}
+
+	// Check if username already exists
+	var existingUser models.User
+	if err := h.db.Where("username = ?", req.NewUsername).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+		return
+	}
+
+	// Store old username for logging
+	oldUsername := user.Username
+
+	// Update username
+	user.Username = req.NewUsername
+	if err := h.db.Save(&user).Error; err != nil {
+		h.logger.Error().Err(err).Msg("Failed to save username")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update username"})
+		return
+	}
+
+	h.logger.Info().Str("old_username", oldUsername).Str("new_username", req.NewUsername).Msg("Username changed successfully")
+
+	c.JSON(http.StatusOK, gin.H{"message": "Username changed successfully"})
+}
+
 // GetCurrentUser returns current user info
 func (h *AuthHandler) GetCurrentUser(c *gin.Context) {
 	userID, _ := c.Get("user_id")
