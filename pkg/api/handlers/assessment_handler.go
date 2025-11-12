@@ -98,6 +98,9 @@ func (h *AssessmentHandler) RequestAssessment(c *gin.Context) {
 	if err := h.db.Create(&assessmentRecord).Error; err != nil {
 		h.logger.Error().Err(err).Msg("Failed to save assessment to database")
 		// Continue anyway - don't fail the request if we can't save to DB
+	} else {
+		// Clean up old assessments to keep only the most recent 20
+		h.cleanupOldAssessments()
 	}
 
 	c.JSON(http.StatusOK, AssessmentResponse{
@@ -498,4 +501,40 @@ Please provide a detailed assessment for %s following the template format simila
 Use real market data and provide specific numbers for all calculations. Be conservative with probability estimates and avoid hype.
 
 %s`, ticker, ticker, portfolioContext)
+}
+
+// cleanupOldAssessments removes assessments beyond the most recent 20
+func (h *AssessmentHandler) cleanupOldAssessments() {
+	// Count total assessments
+	var count int64
+	if err := h.db.Model(&models.Assessment{}).Count(&count).Error; err != nil {
+		h.logger.Error().Err(err).Msg("Failed to count assessments")
+		return
+	}
+
+	// If we have more than 20, delete the oldest ones
+	if count > 20 {
+		// Get IDs of assessments to delete (keep the most recent 20)
+		var idsToDelete []uint
+		if err := h.db.Model(&models.Assessment{}).
+			Select("id").
+			Order("created_at ASC").
+			Limit(int(count - 20)).
+			Pluck("id", &idsToDelete).Error; err != nil {
+			h.logger.Error().Err(err).Msg("Failed to get assessment IDs for cleanup")
+			return
+		}
+
+		// Delete the old assessments
+		if len(idsToDelete) > 0 {
+			if err := h.db.Where("id IN ?", idsToDelete).Delete(&models.Assessment{}).Error; err != nil {
+				h.logger.Error().Err(err).Msg("Failed to delete old assessments")
+			} else {
+				h.logger.Info().
+					Int("deleted", len(idsToDelete)).
+					Int64("total_remaining", 20).
+					Msg("Cleaned up old assessments")
+			}
+		}
+	}
 }
