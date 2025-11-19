@@ -92,14 +92,13 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 		// API Status routes
 		protected.GET("/api-status", portfolioHandler.GetAPIStatus)
 
-		// Export/Import routes
-		protected.GET("/export/csv", stockHandler.ExportCSV)
-		protected.POST("/import/csv", stockHandler.ImportCSV)
+		// Export routes
+		protected.GET("/export/json", stockHandler.ExportJSON)
 
 		// Alerts routes
 		protected.GET("/alerts", portfolioHandler.GetAlerts)
 		protected.DELETE("/alerts/:id", portfolioHandler.DeleteAlert)
-		
+
 		// Cash holdings routes
 		protected.GET("/cash", cashHandler.GetAllCashHoldings)
 		protected.POST("/cash", cashHandler.CreateCashHolding)
