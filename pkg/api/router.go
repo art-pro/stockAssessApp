@@ -28,7 +28,7 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 			"https://www.artpro.dev",
 			"https://artpro.dev",
 		}
-		
+
 		// Check if origin is allowed
 		for _, allowedOrigin := range allowedOrigins {
 			if origin == allowedOrigin {
@@ -36,18 +36,18 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 				break
 			}
 		}
-		
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Requested-With")
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Max-Age", "43200")
-		
+
 		// Handle preflight requests
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
 		}
-		
+
 		c.Next()
 	})
 
@@ -111,28 +111,27 @@ func SetupRouter(db *gorm.DB, cfg *config.Config, logger zerolog.Logger) *gin.En
 		// API Status routes
 		protected.GET("/api-status", portfolioHandler.GetAPIStatus)
 
-		// Export/Import routes
-		protected.GET("/export/csv", stockHandler.ExportCSV)
-		protected.POST("/import/csv", stockHandler.ImportCSV)
+		// Export routes
+		protected.GET("/export/json", stockHandler.ExportJSON)
 
 		// Alerts routes
 		protected.GET("/alerts", portfolioHandler.GetAlerts)
 		protected.DELETE("/alerts/:id", portfolioHandler.DeleteAlert)
-		
+
 		// Exchange rates routes
 		protected.GET("/exchange-rates", exchangeRateHandler.GetAllRates)
 		protected.POST("/exchange-rates/refresh", exchangeRateHandler.RefreshRates)
 		protected.POST("/exchange-rates", exchangeRateHandler.AddCurrency)
 		protected.PUT("/exchange-rates/:code", exchangeRateHandler.UpdateRate)
 		protected.DELETE("/exchange-rates/:code", exchangeRateHandler.DeleteCurrency)
-		
+
 		// Cash holdings routes
 		protected.GET("/cash", cashHandler.GetAllCashHoldings)
 		protected.POST("/cash", cashHandler.CreateCashHolding)
 		protected.PUT("/cash/:id", cashHandler.UpdateCashHolding)
 		protected.DELETE("/cash/:id", cashHandler.DeleteCashHolding)
 		protected.POST("/cash/refresh", cashHandler.RefreshUSDValues)
-		
+
 		// Assessment routes
 		protected.POST("/assessment/request", assessmentHandler.RequestAssessment)
 		protected.GET("/assessment/recent", assessmentHandler.GetRecentAssessments)

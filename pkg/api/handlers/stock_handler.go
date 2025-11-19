@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -66,7 +65,7 @@ func (h *StockHandler) GetStock(c *gin.Context) {
 // CreateStockRequest represents request to create a stock
 type CreateStockRequest struct {
 	Ticker              string  `json:"ticker" binding:"required"`
-	ISIN                string  `json:"isin"`                 // International Securities Identification Number (optional)
+	ISIN                string  `json:"isin"` // International Securities Identification Number (optional)
 	CompanyName         string  `json:"company_name" binding:"required"`
 	Sector              string  `json:"sector" binding:"required"`
 	Currency            string  `json:"currency"`
@@ -691,8 +690,8 @@ func (h *StockHandler) RestoreStock(c *gin.Context) {
 	c.JSON(http.StatusOK, stock)
 }
 
-// ExportCSV exports all stocks and cash holdings to CSV
-func (h *StockHandler) ExportCSV(c *gin.Context) {
+// ExportJSON exports all stocks to JSON matching the template format
+func (h *StockHandler) ExportJSON(c *gin.Context) {
 	var stocks []models.Stock
 	if err := h.db.Find(&stocks).Error; err != nil {
 		h.logger.Error().Err(err).Msg("Failed to fetch stocks")
@@ -700,156 +699,77 @@ func (h *StockHandler) ExportCSV(c *gin.Context) {
 		return
 	}
 
-	var cashHoldings []models.CashHolding
-	if err := h.db.Find(&cashHoldings).Error; err != nil {
-		h.logger.Error().Err(err).Msg("Failed to fetch cash holdings")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch cash holdings"})
-		return
+	type ExportStock struct {
+		Ticker              string  `json:"ticker"`
+		CompanyName         string  `json:"company_name"`
+		ISIN                string  `json:"isin"`
+		Sector              string  `json:"sector"`
+		CurrentPrice        float64 `json:"current_price"`
+		Currency            string  `json:"currency"`
+		FairValue           float64 `json:"fair_value"`
+		UpsidePotential     float64 `json:"upside_potential"`
+		DownsideRisk        float64 `json:"downside_risk"`
+		ProbabilityPositive float64 `json:"probability_positive"`
+		ExpectedValue       float64 `json:"expected_value"`
+		Beta                float64 `json:"beta"`
+		Volatility          float64 `json:"volatility"`
+		PERatio             float64 `json:"pe_ratio"`
+		EPSGrowthRate       float64 `json:"eps_growth_rate"`
+		DebtToEBITDA        float64 `json:"debt_to_ebitda"`
+		DividendYield       float64 `json:"dividend_yield"`
+		BRatio              float64 `json:"b_ratio"`
+		KellyFraction       float64 `json:"kelly_fraction"`
+		HalfKellySuggested  float64 `json:"half_kelly_suggested"`
+		SharesOwned         int     `json:"shares_owned"`
+		AvgPriceLocal       float64 `json:"avg_price_local"`
+		BuyZoneMin          float64 `json:"buy_zone_min"`
+		BuyZoneMax          float64 `json:"buy_zone_max"`
+		Assessment          string  `json:"assessment"`
+		UpdateFrequency     string  `json:"update_frequency"`
+		DataSource          string  `json:"data_source"`
+		FairValueSource     string  `json:"fair_value_source"`
+		Comment             string  `json:"comment"`
 	}
 
-	c.Header("Content-Type", "text/csv")
-	c.Header("Content-Disposition", "attachment;filename=portfolio_export.csv")
+	exportData := make([]ExportStock, 0, len(stocks))
 
-	writer := csv.NewWriter(c.Writer)
-	defer writer.Flush()
-
-	// Write stocks section header
-	writer.Write([]string{"=== STOCKS ==="})
-	
-	// Write stocks header
-	stockHeader := []string{
-		"Ticker", "Company Name", "Sector", "Current Price", "Currency", "Fair Value",
-		"Upside Potential (%)", "Downside Risk (%)", "Probability Positive", "Expected Value (%)",
-		"Beta", "Volatility (%)", "P/E Ratio", "EPS Growth Rate (%)", "Debt to EBITDA",
-		"Dividend Yield (%)", "b Ratio", "Kelly f* (%)", "½-Kelly Suggested (%)",
-		"Shares Owned", "Avg Price", "Current Value USD", "Weight (%)", "Unrealized P&L",
-		"Buy Zone Min", "Buy Zone Max", "Assessment",
-	}
-	writer.Write(stockHeader)
-
-	// Write stock data
 	for _, stock := range stocks {
-		row := []string{
-			stock.Ticker, stock.CompanyName, stock.Sector,
-			strconv.FormatFloat(stock.CurrentPrice, 'f', 2, 64), stock.Currency,
-			strconv.FormatFloat(stock.FairValue, 'f', 2, 64),
-			strconv.FormatFloat(stock.UpsidePotential, 'f', 2, 64),
-			strconv.FormatFloat(stock.DownsideRisk, 'f', 2, 64),
-			strconv.FormatFloat(stock.ProbabilityPositive, 'f', 2, 64),
-			strconv.FormatFloat(stock.ExpectedValue, 'f', 2, 64),
-			strconv.FormatFloat(stock.Beta, 'f', 2, 64),
-			strconv.FormatFloat(stock.Volatility, 'f', 2, 64),
-			strconv.FormatFloat(stock.PERatio, 'f', 2, 64),
-			strconv.FormatFloat(stock.EPSGrowthRate, 'f', 2, 64),
-			strconv.FormatFloat(stock.DebtToEBITDA, 'f', 2, 64),
-			strconv.FormatFloat(stock.DividendYield, 'f', 2, 64),
-			strconv.FormatFloat(stock.BRatio, 'f', 2, 64),
-			strconv.FormatFloat(stock.KellyFraction, 'f', 2, 64),
-			strconv.FormatFloat(stock.HalfKellySuggested, 'f', 2, 64),
-			strconv.Itoa(stock.SharesOwned),
-			strconv.FormatFloat(stock.AvgPriceLocal, 'f', 2, 64),
-			strconv.FormatFloat(stock.CurrentValueUSD, 'f', 2, 64),
-			strconv.FormatFloat(stock.Weight, 'f', 2, 64),
-			strconv.FormatFloat(stock.UnrealizedPnL, 'f', 2, 64),
-			strconv.FormatFloat(stock.BuyZoneMin, 'f', 2, 64),
-			strconv.FormatFloat(stock.BuyZoneMax, 'f', 2, 64),
-			stock.Assessment,
-		}
-		writer.Write(row)
+		exportData = append(exportData, ExportStock{
+			Ticker:              stock.Ticker,
+			CompanyName:         stock.CompanyName,
+			ISIN:                stock.ISIN,
+			Sector:              stock.Sector,
+			CurrentPrice:        stock.CurrentPrice,
+			Currency:            stock.Currency,
+			FairValue:           stock.FairValue,
+			UpsidePotential:     stock.UpsidePotential,
+			DownsideRisk:        stock.DownsideRisk,
+			ProbabilityPositive: stock.ProbabilityPositive,
+			ExpectedValue:       stock.ExpectedValue,
+			Beta:                stock.Beta,
+			Volatility:          stock.Volatility,
+			PERatio:             stock.PERatio,
+			EPSGrowthRate:       stock.EPSGrowthRate,
+			DebtToEBITDA:        stock.DebtToEBITDA,
+			DividendYield:       stock.DividendYield,
+			BRatio:              stock.BRatio,
+			KellyFraction:       stock.KellyFraction,
+			HalfKellySuggested:  stock.HalfKellySuggested,
+			SharesOwned:         stock.SharesOwned,
+			AvgPriceLocal:       stock.AvgPriceLocal,
+			BuyZoneMin:          stock.BuyZoneMin,
+			BuyZoneMax:          stock.BuyZoneMax,
+			Assessment:          stock.Assessment,
+			UpdateFrequency:     stock.UpdateFrequency,
+			DataSource:          "Manual", // Default as per template
+			FairValueSource:     "",       // Not currently stored
+			Comment:             stock.Comment,
+		})
 	}
 
-	// Add empty row separator
-	writer.Write([]string{})
-	
-	// Write cash holdings section header
-	writer.Write([]string{"=== CASH HOLDINGS ==="})
-	
-	// Write cash header
-	cashHeader := []string{
-		"Currency", "Amount", "USD Value", "Description", "Last Updated",
-	}
-	writer.Write(cashHeader)
-
-	// Write cash data
-	for _, cash := range cashHoldings {
-		row := []string{
-			cash.CurrencyCode,
-			strconv.FormatFloat(cash.Amount, 'f', 2, 64),
-			strconv.FormatFloat(cash.USDValue, 'f', 2, 64),
-			cash.Description,
-			cash.LastUpdated.Format("2006-01-02 15:04:05"),
-		}
-		writer.Write(row)
-	}
-
-	// Calculate and write total cash value
-	totalCashUSD := 0.0
-	for _, cash := range cashHoldings {
-		totalCashUSD += cash.USDValue
-	}
-	
-	writer.Write([]string{})
-	writer.Write([]string{"Total Available Cash (USD)", strconv.FormatFloat(totalCashUSD, 'f', 2, 64)})
-}
-
-// ImportCSV imports stocks from CSV
-func (h *StockHandler) ImportCSV(c *gin.Context) {
-	file, _, err := c.Request.FormFile("file")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
-		return
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	records, err := reader.ReadAll()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse CSV"})
-		return
-	}
-
-	if len(records) < 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "CSV file is empty"})
-		return
-	}
-
-	imported := 0
-	skipped := 0
-
-	// Skip header row
-	for _, record := range records[1:] {
-		if len(record) < 3 {
-			skipped++
-			continue
-		}
-
-		// Check if stock already exists
-		var existing models.Stock
-		if err := h.db.Where("ticker = ?", record[0]).First(&existing).Error; err == nil {
-			skipped++
-			continue
-		}
-
-		// Create basic stock entry
-		stock := models.Stock{
-			Ticker:      record[0],
-			CompanyName: record[1],
-			Sector:      record[2],
-		}
-
-		if err := h.db.Create(&stock).Error; err != nil {
-			skipped++
-			continue
-		}
-
-		imported++
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":  "Import completed",
-		"imported": imported,
-		"skipped":  skipped,
-	})
+	c.Header("Content-Type", "application/json")
+	c.Header("Content-Disposition", "attachment;filename=portfolio_export.json")
+	c.JSON(http.StatusOK, exportData)
 }
 
 // BulkUpdateRequest represents the request for bulk stock updates
@@ -906,7 +826,7 @@ func (h *StockHandler) BulkUpdateStocks(c *gin.Context) {
 	for _, stockData := range req.Stocks {
 		var existing models.Stock
 		err := h.db.Where("ticker = ?", stockData.Ticker).First(&existing).Error
-		
+
 		if err == gorm.ErrRecordNotFound {
 			// Create new stock
 			stock := models.Stock{
@@ -941,17 +861,17 @@ func (h *StockHandler) BulkUpdateStocks(c *gin.Context) {
 				Comment:             stockData.Comment,
 				LastUpdated:         time.Now(),
 			}
-			
+
 			// Set default currency if not provided
 			if stock.Currency == "" {
 				stock.Currency = "USD"
 			}
-			
+
 			// Set default update frequency if not provided
 			if stock.UpdateFrequency == "" {
 				stock.UpdateFrequency = "daily"
 			}
-			
+
 			// Calculate additional fields if possible
 			if stock.SharesOwned > 0 && stock.CurrentPrice > 0 {
 				stock.CurrentValueUSD = float64(stock.SharesOwned) * stock.CurrentPrice
@@ -959,7 +879,7 @@ func (h *StockHandler) BulkUpdateStocks(c *gin.Context) {
 					stock.UnrealizedPnL = stock.CurrentValueUSD - (float64(stock.SharesOwned) * stock.AvgPriceLocal)
 				}
 			}
-			
+
 			if err := h.db.Create(&stock).Error; err != nil {
 				errors = append(errors, "Failed to create "+stockData.Ticker+": "+err.Error())
 				continue
@@ -1049,7 +969,7 @@ func (h *StockHandler) BulkUpdateStocks(c *gin.Context) {
 			if stockData.Comment != "" {
 				existing.Comment = stockData.Comment
 			}
-			
+
 			// Recalculate value fields
 			if existing.SharesOwned > 0 && existing.CurrentPrice > 0 {
 				existing.CurrentValueUSD = float64(existing.SharesOwned) * existing.CurrentPrice
@@ -1057,9 +977,9 @@ func (h *StockHandler) BulkUpdateStocks(c *gin.Context) {
 					existing.UnrealizedPnL = existing.CurrentValueUSD - (float64(existing.SharesOwned) * existing.AvgPriceLocal)
 				}
 			}
-			
+
 			existing.LastUpdated = time.Now()
-			
+
 			if err := h.db.Save(&existing).Error; err != nil {
 				errors = append(errors, "Failed to update "+stockData.Ticker+": "+err.Error())
 				continue
@@ -1076,16 +996,16 @@ func (h *StockHandler) BulkUpdateStocks(c *gin.Context) {
 		"updated": updated,
 		"total":   len(req.Stocks),
 	}
-	
+
 	if len(errors) > 0 {
 		response["errors"] = errors
 	}
-	
+
 	h.logger.Info().
 		Int("created", created).
 		Int("updated", updated).
 		Int("total", len(req.Stocks)).
 		Msg("Bulk stock update completed")
-	
+
 	c.JSON(http.StatusOK, response)
 }
